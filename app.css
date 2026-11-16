@@ -1,0 +1,94 @@
+/* Compléments propres à l'application. Uniquement des tokens Sable. */
+body { padding-bottom: env(safe-area-inset-bottom); }
+.topbar { padding-top: env(safe-area-inset-top); height: calc(64px + env(safe-area-inset-top)); }
+p { margin: 0 0 10px; }
+.card > p:last-child { margin-bottom: 0; }
+.back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; text-decoration: none; font-weight: 500; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Barre de progression */
+.bar { height: 8px; border-radius: var(--pill); background: var(--fill); overflow: hidden; margin: 12px 0 6px; }
+.bar > span { display: block; height: 100%; border-radius: var(--pill); background: var(--accent); }
+
+/* Liste des séances d'une semaine */
+.week { display: flex; flex-direction: column; }
+.week a { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; align-items: center; padding: 12px 4px;
+          border-bottom: 1px solid var(--separator); color: var(--label); text-decoration: none; }
+.week a:last-child { border-bottom: 0; }
+.week a:hover { background: var(--surface); }
+.week .day { font-size: 13px; color: var(--label-secondary); font-variant-numeric: tabular-nums; }
+.week .what b { display: block; font-weight: 600; }
+.week .what span { font-size: 13px; color: var(--label-secondary); }
+
+/* Carte exercice */
+.ex-top { display: grid; grid-template-columns: 260px 1fr 150px; gap: 22px; align-items: start; }
+.ex-info h2 { margin: 2px 0 8px; }
+.target { font-size: 17px; font-variant-numeric: tabular-nums; }
+.target b { font-weight: 700; }
+.anim { position: relative; aspect-ratio: 3 / 2; border-radius: var(--r-md); overflow: hidden; background: var(--fill); }
+.anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.anim img + img { animation: flip 2.6s infinite; }
+@keyframes flip { 0%, 42% { opacity: 0; } 50%, 92% { opacity: 1; } 100% { opacity: 0; } }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+/* Carte des muscles */
+.mm { display: flex; gap: 6px; }
+.mm svg { width: 50%; height: auto; }
+.mm .b { fill: var(--fill); }
+.mm .m { fill: var(--switch-off); }
+.mm .p { fill: var(--accent); }
+.mm .s { fill: var(--accent); opacity: .4; }
+.mm-legend { display: flex; gap: 12px; font-size: 12px; color: var(--label-secondary); margin-top: 6px; justify-content: center; }
+.mm-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; background: var(--accent); margin-right: 5px; }
+.mm-legend i.sec { opacity: .4; }
+
+/* Saisie des séries */
+.sets { margin-top: 18px; display: grid; gap: 8px; }
+.set { display: grid; grid-template-columns: 70px 1fr 1fr 44px; gap: 10px; align-items: center; }
+.set .lab { font-size: 13px; color: var(--label-secondary); }
+.set label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--label-secondary); }
+.set input { width: 100%; min-width: 0; height: 44px; font-size: 17px; text-align: center; font-variant-numeric: tabular-nums; }
+.set .ok { width: 44px; height: 44px; padding: 0; }
+.set .ok[aria-pressed="true"] { background: var(--success-bg); color: var(--success-fg); }
+
+/* Blocs de course */
+.blocks { display: grid; gap: 10px; }
+.block { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border-radius: var(--r-md);
+         background: var(--surface); box-shadow: inset 0 0 0 1px var(--separator); }
+.block .n { width: 30px; height: 30px; border-radius: 50%; background: var(--fill); display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 13px; }
+.block.work .n { background: var(--accent); color: var(--on-accent); }
+.block b { display: block; }
+.block span { font-size: 13px; color: var(--label-secondary); }
+.block .pace { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.form input, .form select { width: 100%; }
+ol.steps { margin: 0; padding-left: 20px; color: var(--label-secondary); }
+ol.steps li { margin-bottom: 4px; }
+
+/* Minuteur de repos */
+.rest { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40;
+        display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 20px; border-radius: var(--pill);
+        background: var(--surface-elevated); box-shadow: var(--shadow-lg); }
+.rest[hidden] { display: none; }
+.rest-label { font-size: 13px; color: var(--label-secondary); }
+.rest-time { font-size: 22px; font-weight: 700; min-width: 58px; }
+.rest.done .rest-time { color: var(--success-fg); }
+.has-rest .content-inner { padding-bottom: 130px; }
+
+@media (max-width: 980px) {
+  .ex-top { grid-template-columns: 1fr 130px; }
+  .ex-top .anim { grid-column: 1 / -1; }
+}
+@media (max-width: 860px) {
+  .topbar { height: calc(56px + env(safe-area-inset-top)); }
+  .topbar nav .lbl { display: none; }
+  .theme-seg button { padding: 0 9px; }
+  .card { padding: 18px; }
+  .week a { grid-template-columns: 74px 1fr auto; }
+  .set { grid-template-columns: 52px 1fr 1fr 44px; gap: 8px; }
+}
+@media (max-width: 480px) {
+  .ex-top { grid-template-columns: 1fr; }
+  .mm { max-width: 190px; margin: 0 auto; }
+}

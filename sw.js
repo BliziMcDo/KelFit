@@ -1,0 +1,77 @@
+/* Service worker : met l'application en cache pour un usage hors connexion. */
+const CACHE = 'elan-v1';
+const ASSETS = [
+ "./",
+ "index.html",
+ "sable.css",
+ "app.css",
+ "sable.js",
+ "data.js",
+ "app.js",
+ "vendor/chart.umd.js",
+ "manifest.webmanifest",
+ "icons/icon-180.png",
+ "icons/icon-192.png",
+ "icons/icon-512.png",
+ "img/ex/Barbell_Bench_Press_-_Medium_Grip_0.jpg",
+ "img/ex/Barbell_Bench_Press_-_Medium_Grip_1.jpg",
+ "img/ex/Barbell_Hip_Thrust_0.jpg",
+ "img/ex/Barbell_Hip_Thrust_1.jpg",
+ "img/ex/Barbell_Squat_0.jpg",
+ "img/ex/Barbell_Squat_1.jpg",
+ "img/ex/Butterfly_0.jpg",
+ "img/ex/Butterfly_1.jpg",
+ "img/ex/Cable_Crunch_0.jpg",
+ "img/ex/Cable_Crunch_1.jpg",
+ "img/ex/Dumbbell_Lunges_0.jpg",
+ "img/ex/Dumbbell_Lunges_1.jpg",
+ "img/ex/Dumbbell_Shoulder_Press_0.jpg",
+ "img/ex/Dumbbell_Shoulder_Press_1.jpg",
+ "img/ex/EZ-Bar_Skullcrusher_0.jpg",
+ "img/ex/EZ-Bar_Skullcrusher_1.jpg",
+ "img/ex/Face_Pull_0.jpg",
+ "img/ex/Face_Pull_1.jpg",
+ "img/ex/Hammer_Curls_0.jpg",
+ "img/ex/Hammer_Curls_1.jpg",
+ "img/ex/Hanging_Leg_Raise_0.jpg",
+ "img/ex/Hanging_Leg_Raise_1.jpg",
+ "img/ex/Incline_Dumbbell_Press_0.jpg",
+ "img/ex/Incline_Dumbbell_Press_1.jpg",
+ "img/ex/Leg_Extensions_0.jpg",
+ "img/ex/Leg_Extensions_1.jpg",
+ "img/ex/Leg_Press_0.jpg",
+ "img/ex/Leg_Press_1.jpg",
+ "img/ex/Lying_Leg_Curls_0.jpg",
+ "img/ex/Lying_Leg_Curls_1.jpg",
+ "img/ex/One-Arm_Dumbbell_Row_0.jpg",
+ "img/ex/One-Arm_Dumbbell_Row_1.jpg",
+ "img/ex/Preacher_Curl_0.jpg",
+ "img/ex/Preacher_Curl_1.jpg",
+ "img/ex/Pullups_0.jpg",
+ "img/ex/Pullups_1.jpg",
+ "img/ex/Romanian_Deadlift_0.jpg",
+ "img/ex/Romanian_Deadlift_1.jpg",
+ "img/ex/Seated_Cable_Rows_0.jpg",
+ "img/ex/Seated_Cable_Rows_1.jpg",
+ "img/ex/Seated_Calf_Raise_0.jpg",
+ "img/ex/Seated_Calf_Raise_1.jpg",
+ "img/ex/Seated_Leg_Curl_0.jpg",
+ "img/ex/Seated_Leg_Curl_1.jpg",
+ "img/ex/Side_Lateral_Raise_0.jpg",
+ "img/ex/Side_Lateral_Raise_1.jpg",
+ "img/ex/Standing_Calf_Raises_0.jpg",
+ "img/ex/Standing_Calf_Raises_1.jpg",
+ "img/ex/Triceps_Pushdown_-_Rope_Attachment_0.jpg",
+ "img/ex/Triceps_Pushdown_-_Rope_Attachment_1.jpg",
+ "img/ex/Wide-Grip_Lat_Pulldown_0.jpg",
+ "img/ex/Wide-Grip_Lat_Pulldown_1.jpg"
+];
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+/* Réseau d'abord pour le code (mises à jour immédiates), cache d'abord pour les images. */
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  const img = e.request.destination === 'image';
+  const net = () => fetch(e.request).then(r => { if (r.ok) { const cp = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cp)); } return r; });
+  e.respondWith(img ? caches.match(e.request).then(r => r || net()) : net().catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+});
