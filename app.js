@@ -87,8 +87,17 @@
   /* ---------- Formats ---------- */
   const mmss = sec => { sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+  /* Durée tapée en chiffres seuls (clavier iPhone sans « : ») : 4730 → 47:30, 10512 → 1:05:12. */
+  function maskTime(v) {
+    const d = String(v).replace(/\D/g, '').slice(0, 6);
+    if (d.length <= 2) return d;
+    const s = d.slice(-2), rest = d.slice(0, -2);
+    return rest.length <= 2 ? `${+rest}:${s}` : `${+rest.slice(0, -2)}:${rest.slice(-2)}:${s}`;
+  }
   function parseTime(t) {
-    const p = String(t).trim().replace(/[h'’m]/gi, ':').replace(/[s"]/gi, '').split(':').filter(x => x !== '').map(Number);
+    t = String(t).trim();
+    if (/^\d+$/.test(t)) return t.length <= 2 ? +t * 60 : parseTime(maskTime(t));
+    const p = t.replace(/[h'’m]/gi, ':').replace(/[s"]/gi, '').split(':').filter(x => x !== '').map(Number);
     if (!p.length || p.some(isNaN)) return 0;
     return p.reduce((a, v) => a * 60 + v, 0);
   }
@@ -318,7 +327,7 @@
           <section class="card"><h2>Ma séance</h2>
             <div class="form">
               <div class="field"><label for="r-dist">Distance (km)</label><input id="r-dist" class="num" inputmode="decimal" value="${esc(log.dist ? nf.format(log.dist) : '')}" placeholder="${nf0.format(info.km)}"></div>
-              <div class="field"><label for="r-time">Durée (mm:ss)</label><input id="r-time" class="num" inputmode="numeric" value="${esc(log.time ? mmss(log.time) : '')}" placeholder="52:30"></div>
+              <div class="field"><label for="r-time">Durée</label><input id="r-time" class="num" inputmode="numeric" data-time value="${esc(log.time ? mmss(log.time) : '')}" placeholder="52:30"></div>
               <div class="field"><label for="r-feel">Sensations</label><select id="r-feel">${['Facile', 'Correct', 'Difficile'].map(f => `<option${log.feel === f ? ' selected' : ''}>${f}</option>`).join('')}</select></div>
             </div>
             <p class="note num" id="r-pace">${log.dist && log.time ? 'Allure moyenne : ' + mmss(log.time / log.dist) + '/km' : 'Saisis la distance et la durée relevées sur ta montre.'}</p>
@@ -419,8 +428,8 @@
       <div class="grid grid-2" style="margin-bottom:20px">
         <section class="card"><h2>Programme</h2><div class="form">
           <div class="field"><label for="s-start">Premier jour (semaine 1)</label><input id="s-start" type="date" value="${esc(S.start)}"></div>
-          <div class="field"><label for="s-ref">Temps actuel sur 10 km</label><input id="s-ref" class="num" inputmode="numeric" value="${mmss(S.ref10k)}"></div>
-          <div class="field"><label for="s-target">Objectif sur 10 km</label><input id="s-target" class="num" inputmode="numeric" value="${mmss(S.target10k)}"></div></div>
+          <div class="field"><label for="s-ref">Temps actuel sur 10 km</label><input id="s-ref" class="num" inputmode="numeric" data-time value="${mmss(S.ref10k)}"></div>
+          <div class="field"><label for="s-target">Objectif sur 10 km</label><input id="s-target" class="num" inputmode="numeric" data-time value="${mmss(S.target10k)}"></div></div>
           <div class="row" style="margin-top:14px"><button type="button" class="btn" id="s-shift">Décaler tout le programme d’une semaine</button></div>
           <p class="note">Semaine d’absence ou de maladie : ce bouton repousse toutes les séances de 7 jours. Pour une seule séance, ouvre-la et change sa « Date prévue ».</p>
           <p class="note">Le temps actuel fixe toutes les allures d’entraînement. Par défaut 46:00, estimé depuis ton marathon en 3 h 33 ; corrige-le si tu as un chrono récent.</p></section>
@@ -507,6 +516,7 @@
   });
   view.addEventListener('input', e => {
     const main = view.querySelector('main');
+    if (e.target.hasAttribute('data-time')) e.target.value = maskTime(e.target.value);
     if (e.target.closest('.set')) {
       const row = e.target.closest('.set');
       if (e.target.dataset.f === 'r') row.querySelector('[data-ok]').setAttribute('aria-pressed', String(num(e.target.value) > 0));
