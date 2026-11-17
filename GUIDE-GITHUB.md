@@ -6,7 +6,7 @@ Les mots **en gras** sont les termes exacts affichés sur le site GitHub (en ang
 
 - **GitHub** est un site qui stocke des dossiers de code, appelés **repositories** (« dépôts », souvent abrégé « repo »).
 - **GitHub Pages** est un service gratuit de GitHub qui transforme un dépôt en site web. C'est lui qui donnera à KelFit une adresse utilisable sur ton iPhone.
-- Ton compte : `BliziMcDo`. L'adresse finale sera `https://blizimcdo.github.io/kelfit/`.
+- Ton compte : `BliziMcDo`. L'adresse finale sera `https://blizimcdo.github.io/KelFit/`.
 
 Ce qui est publié : le code de l'application et les photos d'exercices. Ce qui ne l'est pas : `Historique Muscu.txt` et les séances que tu saisis (elles restent sur ton téléphone).
 
@@ -42,18 +42,18 @@ C'est à faire une seule fois ; ton PC s'en souvient ensuite.
 
 ## Étape 4 — Activer GitHub Pages
 
-1. Ouvre https://github.com/BliziMcDo/kelfit. Tu dois voir la liste des fichiers (`index.html`, `app.js`, …).
+1. Ouvre https://github.com/BliziMcDo/KelFit. Tu dois voir la liste des fichiers (`index.html`, `app.js`, …).
 2. Clique sur l'onglet **Settings** (roue dentée, dans la barre du dépôt, tout à droite).
 3. Dans le menu de gauche, rubrique **Code and automation**, clique sur **Pages**.
 4. Sous **Build and deployment**, à **Source**, choisis **Deploy from a branch**.
 5. Sous **Branch**, remplace **None** par **main**, laisse le dossier sur **/ (root)**, puis clique sur **Save**.
-6. Patiente 1 à 2 minutes et recharge la page. Un encadré apparaît en haut : **Your site is live at** `https://blizimcdo.github.io/kelfit/`, avec un bouton **Visit site**.
+6. Patiente 1 à 2 minutes et recharge la page. Un encadré apparaît en haut : **Your site is live at** `https://blizimcdo.github.io/KelFit/`, avec un bouton **Visit site**.
 
 Pour suivre la publication : onglet **Actions**, ligne **pages build and deployment**. Rond jaune = en cours, coche verte = publié, croix rouge = échec (dis-le-moi).
 
 ## Étape 5 — Installer sur l'iPhone
 
-1. Sur l'iPhone, ouvre **Safari** (pas Chrome) à l'adresse `https://blizimcdo.github.io/kelfit/`.
+1. Sur l'iPhone, ouvre **Safari** (pas Chrome) à l'adresse `https://blizimcdo.github.io/KelFit/`.
 2. Touche le bouton **Partager** (carré avec une flèche vers le haut).
 3. Choisis **Sur l'écran d'accueil**, puis **Ajouter**.
 4. Lance KelFit depuis son icône « KF ». Après la première ouverture, elle fonctionne aussi sans réseau.
