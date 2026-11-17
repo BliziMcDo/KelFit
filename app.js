@@ -1,7 +1,7 @@
-/* Élan — logique de l'application (état local, vues, progression automatique). */
+/* KelFit — logique de l'application (état local, vues, progression automatique). */
 (function () {
   'use strict';
-  const KEY = 'elan-v1';
+  const KEY = 'kelfit-v1';
   const view = document.getElementById('view');
   const nf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
   const nf0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -20,7 +20,7 @@
   function mondayISO() { const d = today(); return iso(addDays(d, -((d.getDay() + 6) % 7))); }
 
   /* ---------- État ---------- */
-  const defaults = () => ({ start: mondayISO(), ref10k: 2760, target10k: 2670, logs: {}, runs: {} });
+  const defaults = () => ({ start: mondayISO(), ref10k: 2760, target10k: 2670, logs: {}, runs: {}, moved: {} });
   function load() { try { return Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY)) || {}); } catch { return defaults(); } }
   let S = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { Sable.toast('Enregistrement impossible sur cet appareil'); } }
@@ -33,11 +33,16 @@
     const diff = Math.floor((today() - parse(S.start)) / 864e5);
     return Math.min(TOTAL_WEEKS, Math.max(1, Math.floor(diff / 7) + 1));
   }
-  const isRun = k => k === 'Q' || k === 'E';
+  const isRun = k => k === 'Q' || k === 'E' || k === 'O';
+  const DAY = Object.fromEntries(WEEK_ORDER), REQ = WEEK_ORDER.filter(([k]) => k !== 'O');
+  /* Date d'une séance : date déplacée par l'utilisateur, sinon jour type de la semaine. */
+  const sessDate = (w, k) => S.moved[`${w}-${k}`] ? parse(S.moved[`${w}-${k}`]) : dateOf(w, DAY[k]);
+  const ordered = w => WEEK_ORDER.map(([k]) => k).sort((a, b) => sessDate(w, a) - sessDate(w, b));
   const isDone = (w, k) => !!(isRun(k) ? S.runs[`${w}-${k}`] : S.logs[`${w}-${k}`])?.done;
 
-  function prescription(w, role) {
+  function prescription(w, role, ss) {
     const r = { ...RULES[phaseOf(w)][role], test: false, deload: false };
+    if (ss === 'a') r.rest = 0;
     if (w === 12 && role === 'main') { r.sets = 2; r.test = true; }
     else if (isDeload(w)) { r.sets = 2; r.deload = true; }
     return r;
@@ -100,10 +105,24 @@
     const p = paces();
     if (k === 'Q') {
       const q = RUN_Q[w], km = 2.7 + q.reps * q.dist / 1000 + q.reps * q.rec / 390 + 1.8;
-      return { name: q.title, sub: `${q.reps} × ${nf0.format(q.dist)} m · environ ${nf0.format(km)} km`, q, km };
+      return { name: q.title, sub: `${q.reps} × ${nf0.format(q.dist)} m · environ ${nf0.format(km)} km`, q, km,
+        min: 25 + q.reps * (p[q.pace] * q.dist / 1000 + q.rec) / 60 };
     }
-    if (w === 12) return { name: 'Test 10 km', sub: `Objectif ${mmss(S.target10k)}`, km: 10, test: true };
-    return { name: 'Footing', sub: `${RUN_E[w]} km à ${mmss(p.easyLo)}–${mmss(p.easyHi)}/km`, km: RUN_E[w] };
+    const easy = (p.easyLo + p.easyHi) / 2;
+    if (k === 'O') return { name: 'Footing optionnel', sub: `${RUN_O_KM} km très facile, seulement si tu es frais`, km: RUN_O_KM, min: RUN_O_KM * easy / 60, opt: true };
+    if (w === 12) return { name: 'Test 10 km', sub: `Objectif ${mmss(S.target10k)}`, km: 10, test: true, min: 20 + S.target10k / 60 };
+    return { name: 'Footing', sub: `${RUN_E[w]} km à ${mmss(p.easyLo)}–${mmss(p.easyHi)}/km`, km: RUN_E[w], min: RUN_E[w] * easy / 60 };
+  }
+  function sessionMinutes(w, k) {
+    let sec = WARMUP_SEC;
+    for (const [, role, ss] of SESSIONS[k].ex) { const rx = prescription(w, role, ss); sec += rx.sets * (SET_SEC + rx.rest) + (ss === 'a' ? 0 : MOVE_SEC); }
+    return sec / 60;
+  }
+  const minutes = (w, k) => Math.round(isRun(k) ? runInfo(w, k).min : sessionMinutes(w, k));
+  function moveControl(w, k) {
+    const key = `${w}-${k}`;
+    return `<div class="row move"><div class="field"><label for="move-date">Date prévue</label><input type="date" id="move-date" data-key="${key}" value="${iso(sessDate(w, k))}"></div>
+      ${S.moved[key] ? `<button type="button" class="btn sm ghost" data-move-reset="${key}">Rétablir</button>` : ''}</div>`;
   }
 
   /* ---------- Carte des muscles ---------- */
@@ -131,45 +150,46 @@
   }
 
   /* ---------- Éléments communs ---------- */
-  function statusBadge(w, k, day) {
+  function statusBadge(w, k) {
     if (isDone(w, k)) return '<span class="badge ok">Fait</span>';
-    const d = dateOf(w, day), t = today();
+    const d = sessDate(w, k), t = today();
     if (+d === +t) return '<span class="badge">Aujourd’hui</span>';
+    if (k === 'O') return '<span class="badge neutral">Optionnel</span>';
     if (d < t) return '<span class="badge warn">À rattraper</span>';
     return CHEV;
   }
   function weekList(w) {
-    return `<div class="week">${WEEK_ORDER.map(([k, day]) => {
+    return `<div class="week">${ordered(w).map(k => {
       const run = isRun(k), info = run ? runInfo(w, k) : null, s = SESSIONS[k];
       const href = run ? `#/course/${w}/${k}` : `#/seance/${w}/${k}`;
-      return `<a href="${href}"><span class="day">${dayFmt.format(dateOf(w, day))}</span>
-        <span class="what"><b>${run ? 'Course · ' + info.name : s.name}</b><span>${run ? info.sub : `${s.sub} · ${s.ex.length} exercices`}</span></span>
-        ${statusBadge(w, k, day)}</a>`;
+      return `<a href="${href}"><span class="day">${dayFmt.format(sessDate(w, k))}</span>
+        <span class="what"><b>${run ? 'Course · ' + info.name : s.name}</b><span>${run ? info.sub : `${s.sub} · ${s.ex.length} exercices`} · ${minutes(w, k)} min</span></span>
+        ${statusBadge(w, k)}</a>`;
     }).join('')}</div>`;
   }
   const weekRange = w => `du ${shortFmt.format(dateOf(w, 0))} au ${shortFmt.format(dateOf(w, 6))}`;
   const weekTag = w => w === 12 ? '<span class="badge warn">Semaine de test</span>' : isDeload(w) ? '<span class="badge neutral">Semaine allégée</span>' : '';
-  const countDone = w => WEEK_ORDER.filter(([k]) => isDone(w, k)).length;
+  const countDone = w => REQ.filter(([k]) => isDone(w, k)).length;
   function totalDone() { let n = 0; for (let w = 1; w <= TOTAL_WEEKS; w++) n += countDone(w); return n; }
 
   /* ---------- Vue : Aujourd'hui ---------- */
   function viewToday() {
     const w = currentWeek(), ph = phaseOf(w), P = PHASES[ph], t = today(), start = parse(S.start);
-    const next = WEEK_ORDER.find(([k]) => !isDone(w, k));
-    const total = totalDone(), all = TOTAL_WEEKS * WEEK_ORDER.length;
+    const next = ordered(w).filter(k => k !== 'O').find(k => !isDone(w, k));
+    const total = totalDone(), all = TOTAL_WEEKS * REQ.length;
     let banner = '';
     if (t < start) banner = `<div class="banner info"><span>Le programme démarre le ${dayFmt.format(start)}.</span><a class="btn sm" href="#/reglages">Changer la date</a></div>`;
     else if (t > dateOf(TOTAL_WEEKS, 6)) banner = `<div class="banner info"><span>Les 12 semaines sont terminées. Mets à jour tes repères et relance un cycle.</span><a class="btn sm" href="#/reglages">Réglages</a></div>`;
     let nextHtml;
     if (next) {
-      const [k, day] = next, run = isRun(k), info = run ? runInfo(w, k) : null, s = SESSIONS[k];
-      nextHtml = `<div class="eyebrow">Prochaine séance · ${dayFmt.format(dateOf(w, day))}</div>
+      const k = next, run = isRun(k), info = run ? runInfo(w, k) : null, s = SESSIONS[k];
+      nextHtml = `<div class="eyebrow">Prochaine séance · ${dayFmt.format(sessDate(w, k))} · ${minutes(w, k)} min</div>
         <h2 style="margin:6px 0 4px">${run ? 'Course · ' + info.name : s.name + ' · ' + s.sub}</h2>
         <p class="muted">${run ? info.sub : s.ex.slice(0, 3).map(([id]) => EX[id].n).join(', ') + '…'}</p>
         <a class="btn primary lg" href="${run ? `#/course/${w}/${k}` : `#/seance/${w}/${k}`}">Ouvrir la séance</a>`;
     } else {
       nextHtml = `<div class="eyebrow">Semaine ${w}</div><h2 style="margin:6px 0 4px">Semaine complète</h2>
-        <p class="muted">Les six séances sont faites. Récupère, la suite arrive lundi.</p><a class="btn" href="#/programme">Voir la suite</a>`;
+        <p class="muted">Les six séances sont faites. Récupère, la suite arrive mardi.</p><a class="btn" href="#/programme">Voir la suite</a>`;
     }
     view.innerHTML = `<div class="page-head"><div><h1>Aujourd’hui</h1><p>${dayFmt.format(t)}</p></div></div><main>${banner}
       <section class="card grid grid-hero">
@@ -180,7 +200,7 @@
           <div class="small muted num">${total} séance${total > 1 ? 's' : ''} faite${total > 1 ? 's' : ''} sur ${all}</div></div>
         <div>${nextHtml}</div>
       </section>
-      <section class="card"><div class="card-head"><h2>Cette semaine</h2><span class="badge neutral num">${countDone(w)} / ${WEEK_ORDER.length}</span></div>${weekList(w)}</section>
+      <section class="card"><div class="card-head"><h2>Cette semaine</h2><span class="badge neutral num">${countDone(w)} / ${REQ.length}</span></div>${weekList(w)}</section>
       <div class="grid grid-2">
         <section class="card"><h2>Objectif de la phase</h2><p>${P.goal}</p><p class="muted">${P.effort}</p></section>
         <section class="card"><h2>La règle de progression</h2>
@@ -194,14 +214,14 @@
   function viewProgramme() {
     const ph = phaseTab || phaseOf(currentWeek()), P = PHASES[ph], R = RULES[ph];
     const weeks = [1, 2, 3, 4].map(i => (ph - 1) * 4 + i);
-    view.innerHTML = `<div class="page-head"><div><h1>Programme</h1><p>12 semaines, 3 phases · 4 séances de musculation et 2 de course par semaine</p></div>
+    view.innerHTML = `<div class="page-head"><div><h1>Programme</h1><p>12 semaines, 3 phases · 4 séances de musculation et 2 à 3 de course par semaine</p></div>
       <div class="seg" role="group" aria-label="Phase">${[1, 2, 3].map(i =>
         `<button type="button" data-phase="${i}" aria-pressed="${i === ph}">Phase ${i}</button>`).join('')}</div></div><main>
       <section class="card"><div class="eyebrow">${P.weeks}</div><h2 style="margin-top:4px">Phase ${ph} · ${P.name}</h2>
         <p>${P.goal}</p><p class="muted">${P.effort} En course : ${P.run}</p>
         <div class="stats">${['main', 'comp', 'acc'].map(r => `<div class="stat"><div class="label">${ROLE_LABEL[r]}</div>
           <div class="value">${R[r].sets} × ${R[r].lo}-${R[r].hi}</div><div class="sub">repos ${mmss(R[r].rest)}</div></div>`).join('')}</div>
-        <p class="note">La quatrième semaine de chaque phase est allégée : 2 séries par exercice à 90 % de la charge, pour récupérer avant la suite.</p>
+        <p class="note">La quatrième semaine de chaque phase est allégée : 2 séries par exercice à 90 % de la charge, pour récupérer avant la suite. Hors semaines allégées, chaque séance de musculation dure entre 55 et 70 minutes, échauffement de 5 minutes compris.</p>
       </section>
       <div class="grid grid-2">${weeks.map(w => `<section class="card"><div class="card-head"><h2>Semaine ${w}</h2>
         <span class="row">${weekTag(w)}<span class="small muted">${weekRange(w)}</span></span></div>${weekList(w)}</section>`).join('')}</div></main>`;
@@ -212,8 +232,11 @@
     const s = SESSIONS[k];
     if (!s || !(w >= 1 && w <= TOTAL_WEEKS)) return viewToday();
     const key = `${w}-${k}`, log = S.logs[key];
-    const cards = s.ex.map(([id, role], i) => {
-      const ex = EX[id], rx = prescription(w, role), kg = targetLoad(id, w, role), prev = lastLog(id, w, false), cur = log?.ex?.[id];
+    const warm = `<section class="card"><div class="eyebrow">Avant de commencer · 5 minutes</div><h2 style="margin-top:4px">Échauffement</h2>
+      <p>3 minutes de rameur ou de vélo, puis 2 minutes de mobilité des articulations du jour (${k[0] === 'H' ? 'épaules, coudes, poignets' : 'hanches, genoux, chevilles'}).</p>
+      <p class="muted">Sur le premier exercice, fais ensuite 2 séries de montée en charge : 8 répétitions à la moitié de la charge, puis 4 aux trois quarts.</p></section>`;
+    const cards = s.ex.map(([id, role, ss], i) => {
+      const ex = EX[id], rx = prescription(w, role, ss), kg = targetLoad(id, w, role), prev = lastLog(id, w, false), cur = log?.ex?.[id];
       const prevTxt = prev ? `Dernière fois : ${doneSets(prev).map(x => `${ex.bw && !x.w ? '' : nf.format(x.w || 0) + ' kg × '}${x.r}`).join(' · ')}` : 'Première séance sur cet exercice.';
       const rows = Array.from({ length: rx.sets }, (_, n) => {
         const v = cur?.sets?.[n] || {};
@@ -223,23 +246,23 @@
           <label><input class="num" inputmode="numeric" data-f="r" value="${esc(v.r || '')}" placeholder="${rx.test && n === 1 ? 'max' : rx.lo + '-' + rx.hi}" aria-label="Répétitions, série ${n + 1}"> reps</label>
           <button type="button" class="btn ok" data-ok aria-pressed="${!!v.r}" aria-label="Valider la série ${n + 1} et lancer le repos">${CHECK}</button></div>`;
       }).join('');
-      return `<section class="card ex" data-ex="${id}" data-role="${role}">
+      return `<section class="card ex" data-ex="${id}" data-role="${role}" data-ss="${ss || ''}">
         <div class="ex-top">
           <div class="anim"><img src="img/ex/${ex.img}_0.jpg" alt="${esc(ex.n)}, position de départ" loading="lazy"><img src="img/ex/${ex.img}_1.jpg" alt="" loading="lazy"></div>
           <div class="ex-info"><div class="eyebrow">Exercice ${i + 1} · ${ROLE_LABEL[role]}</div><h2>${ex.n}</h2>
-            <p class="target"><b>${rx.sets} × ${rx.lo}-${rx.hi}</b> à <b>${loadText(ex, kg)}</b> · repos ${mmss(rx.rest)}</p>
+            <p class="target"><b>${rx.sets} × ${rx.lo}-${rx.hi}</b> à <b>${loadText(ex, kg)}</b> · ${ss === 'a' ? 'sans repos, enchaîne avec ' + EX[s.ex[i + 1][0]].n.toLowerCase() : 'repos ' + mmss(rx.rest)}</p>
             ${rx.test ? '<p class="small"><b>Test :</b> deuxième série au maximum de répétitions propres.</p>' : ''}
             <p class="muted small">${ex.cue}</p><p class="muted small num">${prevTxt}</p>
             <div class="tags">${ex.p.map(m => `<span class="badge">${MUSCLES[m]}</span>`).join('')}${ex.s.map(m => `<span class="badge neutral">${MUSCLES[m]}</span>`).join('')}
-              ${ex.est && !prev ? '<span class="badge warn">Charge estimée, à ajuster</span>' : ''}</div></div>
+              ${ss ? '<span class="badge neutral">Superset</span>' : ''}${ex.est && !prev ? '<span class="badge warn">Charge estimée, à ajuster</span>' : ''}</div></div>
           ${muscleMap(ex)}
         </div>
         <div class="sets">${rows}</div></section>`;
     }).join('');
     view.innerHTML = `<a class="back" href="#/">${BACK}Retour</a>
-      <div class="page-head"><div><h1>${s.name} · ${s.sub}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · ${dayFmt.format(dateOf(w, s.day))}</p></div>
-        <span class="row">${weekTag(w)}${log?.done ? '<span class="badge ok">Fait</span>' : ''}</span></div>
-      <main data-session="${key}">${cards}
+      <div class="page-head"><div><h1>${s.name} · ${s.sub}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · environ ${minutes(w, k)} min</p></div>
+        <span class="row">${weekTag(w)}${log?.done ? '<span class="badge ok">Fait</span>' : ''}${moveControl(w, k)}</span></div>
+      <main data-session="${key}">${warm}${cards}
         <div class="toolbar"><span class="spacer"></span>
           ${log?.done ? '<button type="button" class="btn" data-undone>Marquer comme non faite</button>' : ''}
           <button type="button" class="btn primary lg" data-finish>${log?.done ? 'Mettre à jour la séance' : 'Terminer la séance'}</button></div></main>`;
@@ -261,7 +284,6 @@
   function viewRun(w, k) {
     if (!isRun(k) || !(w >= 1 && w <= TOTAL_WEEKS)) return viewToday();
     const info = runInfo(w, k), p = paces(), key = `${w}-${k}`, log = S.runs[key] || {};
-    const day = WEEK_ORDER.find(x => x[0] === k)[1];
     const block = (n, cls, title, sub, pace) => `<div class="block ${cls}"><span class="n">${n}</span><div><b>${title}</b><span>${sub}</span></div><div class="pace">${pace}</div></div>`;
     const easy = `${mmss(p.easyLo)}–${mmss(p.easyHi)}/km`;
     let blocks, watch;
@@ -277,15 +299,18 @@
         + block(2, 'work', '10 km chronométrés', `Pars à l’allure visée, accélère sur les 2 derniers kilomètres si tu peux · objectif ${mmss(S.target10k)}`, mmss(p.cible) + '/km')
         + block(3, '', 'Retour au calme', '5 à 10 minutes en marchant ou en trottinant', '—');
       watch = `<li>Échauffement : objectif Temps, 15 minutes.</li><li>Travail : objectif Distance, 10 km, alerte d’allure ${mmss(p.cible)}/km.</li>`;
+    } else if (info.opt) {
+      blocks = block(1, 'work', `Footing de ${info.km} km`, 'Séance facultative de récupération. Saute-la si les jambes sont lourdes : la musculation passe avant.', `${mmss(p.easyHi)}/km ou plus lent`);
+      watch = `<li>Un seul bloc Travail : objectif Distance, ${info.km} km, sans alerte d’allure.</li>`;
     } else {
       blocks = block(1, 'work', `Footing de ${info.km} km`, 'Aisance respiratoire : tu dois pouvoir parler en phrases complètes. Termine par 4 lignes droites de 20 secondes.', easy);
       watch = `<li>Un seul bloc Travail : objectif Distance, ${info.km} km, alerte d’allure entre ${mmss(p.easyLo)} et ${mmss(p.easyHi)}/km.</li>`;
     }
     view.innerHTML = `<a class="back" href="#/">${BACK}Retour</a>
-      <div class="page-head"><div><h1>Course · ${info.name}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · ${dayFmt.format(dateOf(w, day))}</p></div>
-        <span class="row">${weekTag(w)}${log.done ? '<span class="badge ok">Fait</span>' : ''}</span></div>
+      <div class="page-head"><div><h1>Course · ${info.name}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · environ ${minutes(w, k)} min</p></div>
+        <span class="row">${weekTag(w)}${log.done ? '<span class="badge ok">Fait</span>' : ''}${moveControl(w, k)}</span></div>
       <main data-run="${key}">
-        <section class="card"><div class="card-head"><h2>Déroulé</h2><span class="badge neutral num">environ ${nf0.format(info.km)} km</span></div><div class="blocks">${blocks}</div>
+        <section class="card"><div class="card-head"><h2>Déroulé</h2><span class="badge neutral num">environ ${nf0.format(info.km)} km · ${minutes(w, k)} min</span></div><div class="blocks">${blocks}</div>
           <p class="note">Allures calculées depuis ton temps de référence sur 10 km (${mmss(S.ref10k)}) et ton objectif (${mmss(S.target10k)}). Modifiables dans les réglages.</p></section>
         <div class="grid grid-2">
           <section class="card"><h2>Sur l’Apple Watch</h2>
@@ -323,12 +348,12 @@
     return { plan, done };
   }
   function viewProgress() {
-    const w = currentWeek(), total = totalDone(), all = TOTAL_WEEKS * WEEK_ORDER.length;
+    const w = currentWeek(), total = totalDone(), all = TOTAL_WEEKS * REQ.length;
     let tonnage = 0;
     for (const k of Object.keys(SESSIONS)) for (const [id, e] of Object.entries(S.logs[`${w}-${k}`]?.ex || {}))
       doneSets(e).forEach(s => { tonnage += (s.w || 0) * s.r * (EX[id]?.hand ? 2 : 1); });
     const runs = Object.entries(S.runs).filter(([, r]) => r.dist && r.time).map(([key, r]) => ({ key, ...r })).sort((a, b) => a.date < b.date ? -1 : 1);
-    const kmWeek = ['Q', 'E'].reduce((a, k) => a + (S.runs[`${w}-${k}`]?.dist || 0), 0);
+    const kmWeek = ['Q', 'E', 'O'].reduce((a, k) => a + (S.runs[`${w}-${k}`]?.dist || 0), 0);
     const last = runs[runs.length - 1];
     const b = exSeries('bench'), sq = exSeries('squat');
     const delta = pts => { if (pts.length < 2) return '<span class="muted">n/d</span>'; const d = pts[pts.length - 1].e1 - pts[0].e1;
@@ -336,7 +361,7 @@
     view.innerHTML = `<div class="page-head"><div><h1>Progrès</h1><p>Semaine ${w} sur ${TOTAL_WEEKS} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name}</p></div></div><main>
       <div class="grid grid-4" style="margin-bottom:20px">
         <section class="card"><div class="kpi"><span class="label">Séances réalisées</span><span class="value">${total}</span><span class="sub">sur ${all} · <b>${nf0.format(total / all * 100)} %</b></span></div></section>
-        <section class="card"><div class="kpi"><span class="label">Charge soulevée cette semaine</span><span class="value">${tonnage ? nf0.format(tonnage) + ' kg' : '—'}</span><span class="sub">${countDone(w)} séances sur ${WEEK_ORDER.length} cette semaine</span></div></section>
+        <section class="card"><div class="kpi"><span class="label">Charge soulevée cette semaine</span><span class="value">${tonnage ? nf0.format(tonnage) + ' kg' : '—'}</span><span class="sub">${countDone(w)} séances sur ${REQ.length} cette semaine</span></div></section>
         <section class="card"><div class="kpi"><span class="label">Force estimée, développé couché</span><span class="value">${b.length ? nf.format(b[b.length - 1].e1) + ' kg' : '—'}</span><span class="sub">depuis le début : ${delta(b)} · squat : ${delta(sq)}</span></div></section>
         <section class="card"><div class="kpi"><span class="label">Course cette semaine</span><span class="value">${kmWeek ? nf.format(kmWeek) + ' km' : '—'}</span><span class="sub">${last ? 'dernière allure : <b>' + mmss(last.time / last.dist) + '/km</b>' : 'aucune sortie enregistrée'}</span></div></section>
       </div>
@@ -396,8 +421,10 @@
           <div class="field"><label for="s-start">Premier jour (semaine 1)</label><input id="s-start" type="date" value="${esc(S.start)}"></div>
           <div class="field"><label for="s-ref">Temps actuel sur 10 km</label><input id="s-ref" class="num" inputmode="numeric" value="${mmss(S.ref10k)}"></div>
           <div class="field"><label for="s-target">Objectif sur 10 km</label><input id="s-target" class="num" inputmode="numeric" value="${mmss(S.target10k)}"></div></div>
+          <div class="row" style="margin-top:14px"><button type="button" class="btn" id="s-shift">Décaler tout le programme d’une semaine</button></div>
+          <p class="note">Semaine d’absence ou de maladie : ce bouton repousse toutes les séances de 7 jours. Pour une seule séance, ouvre-la et change sa « Date prévue ».</p>
           <p class="note">Le temps actuel fixe toutes les allures d’entraînement. Par défaut 46:00, estimé depuis ton marathon en 3 h 33 ; corrige-le si tu as un chrono récent.</p></section>
-        <section class="card"><h2>Installer sur l’iPhone</h2><ol class="steps"><li>Ouvre l’adresse de l’application dans Safari.</li><li>Touche Partager, puis « Sur l’écran d’accueil ».</li><li>Lance Élan depuis l’icône : elle fonctionne aussi sans réseau.</li></ol>
+        <section class="card"><h2>Installer sur l’iPhone</h2><ol class="steps"><li>Ouvre l’adresse de l’application dans Safari.</li><li>Touche Partager, puis « Sur l’écran d’accueil ».</li><li>Lance KelFit depuis l’icône : elle fonctionne aussi sans réseau.</li></ol>
           <p class="note">Les données restent sur l’appareil où tu les saisis. Utilise l’export ci-dessous pour les copier sur un autre.</p></section>
       </div>
       <section class="card"><h2>Mes données</h2><p class="muted">${Object.keys(S.logs).length} séances de musculation et ${Object.keys(S.runs).length} courses enregistrées sur cet appareil.</p>
@@ -446,10 +473,10 @@
     const ok = t.closest('[data-ok]');
     if (ok) {
       const row = ok.closest('.set'), card = ok.closest('.ex'), r = row.querySelector('[data-f=r]');
-      const [w] = main.dataset.session.split('-').map(Number), rx = prescription(w, card.dataset.role);
+      const [w] = main.dataset.session.split('-').map(Number), rx = prescription(w, card.dataset.role, card.dataset.ss);
       if (ok.getAttribute('aria-pressed') === 'true') { ok.setAttribute('aria-pressed', 'false'); r.value = ''; collectSession(main); return; }
       if (!num(r.value)) r.value = rx.hi;
-      ok.setAttribute('aria-pressed', 'true'); collectSession(main); startRest(rx.rest); return;
+      ok.setAttribute('aria-pressed', 'true'); collectSession(main); if (rx.rest) startRest(rx.rest); return;
     }
     if (t.closest('[data-finish]')) {
       const log = collectSession(main);
@@ -467,10 +494,13 @@
       save(); location.hash = '#/'; return;
     }
     if (t.closest('[data-run-undone]')) { delete S.runs[main.dataset.run]; save(); return route(); }
+    const mr = t.closest('[data-move-reset]');
+    if (mr) { delete S.moved[mr.dataset.moveReset]; save(); Sable.toast('Date d’origine rétablie'); return route(); }
+    if (t.closest('#s-shift')) { S.start = iso(addDays(parse(S.start), 7)); save(); Sable.toast('Programme décalé d’une semaine'); return route(); }
     if (t.closest('#s-export')) {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
-      a.download = `elan-${iso(today())}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return;
+      a.download = `kelfit-${iso(today())}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return;
     }
     if (t.closest('#s-reset')) confirmBox('Tout effacer ?', 'Toutes les séances enregistrées sur cet appareil seront supprimées. Cette action est définitive.',
       () => { S = defaults(); save(); Sable.toast('Données effacées'); route(); });
@@ -489,6 +519,7 @@
   });
   view.addEventListener('change', e => {
     const id = e.target.id;
+    if (id === 'move-date' && e.target.value) { S.moved[e.target.dataset.key] = e.target.value; save(); Sable.toast('Séance déplacée au ' + dayFmt.format(parse(e.target.value))); return route(); }
     if (id === 'chart-ex') { chartEx = e.target.value; return viewProgress(); }
     if (id === 's-start' && e.target.value) { S.start = e.target.value; save(); Sable.toast('Date de départ mise à jour'); }
     if (id === 's-ref' || id === 's-target') {

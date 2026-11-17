@@ -67,19 +67,22 @@ const EX = {
                cue: 'Sans balancer, enroule le bassin pour monter les jambes. Genoux fléchis si besoin.' },
 };
 
-/* Séances de musculation : [exercice, rôle]. Rôles : main (principal), comp (complémentaire), acc (accessoire). */
+/* Séances de musculation : [exercice, rôle, superset]. Superset : 'a' s'enchaîne sans repos avec le suivant ('b').
+   Rôles : main (principal), comp (complémentaire), acc (accessoire). */
 const SESSIONS = {
-  HA: { name: 'Haut A', sub: 'Pectoraux et dos', day: 0,
-        ex: [['bench', 'main'], ['latpull', 'main'], ['inclinedb', 'comp'], ['cablerow', 'comp'], ['latraise', 'acc'], ['skull', 'acc'], ['preacher', 'acc']] },
-  BA: { name: 'Bas A', sub: 'Quadriceps', day: 2,
+  HA: { name: 'Haut A', sub: 'Pectoraux et dos',
+        ex: [['bench', 'main'], ['latpull', 'main'], ['inclinedb', 'comp'], ['cablerow', 'comp'], ['latraise', 'acc'], ['skull', 'acc', 'a'], ['preacher', 'acc', 'b']] },
+  BA: { name: 'Bas A', sub: 'Quadriceps',
         ex: [['squat', 'main'], ['rdl', 'comp'], ['legext', 'acc'], ['seatcurl', 'acc'], ['standcalf', 'acc'], ['cablecrunch', 'acc']] },
-  HB: { name: 'Haut B', sub: 'Épaules et dos', day: 4,
-        ex: [['dbpress', 'main'], ['pullup', 'main'], ['butterfly', 'comp'], ['dbrow', 'comp'], ['facepull', 'acc'], ['pushdown', 'acc'], ['hammer', 'acc']] },
-  BB: { name: 'Bas B', sub: 'Ischios et fessiers', day: 5,
+  HB: { name: 'Haut B', sub: 'Épaules et dos',
+        ex: [['dbpress', 'main'], ['pullup', 'main'], ['butterfly', 'comp'], ['dbrow', 'comp'], ['facepull', 'acc'], ['pushdown', 'acc', 'a'], ['hammer', 'acc', 'b']] },
+  BB: { name: 'Bas B', sub: 'Ischios et fessiers',
         ex: [['legpress', 'main'], ['hipthrust', 'comp'], ['lunge', 'comp'], ['lyingcurl', 'acc'], ['seatcalf', 'acc'], ['legraise', 'acc']] },
 };
-/* Ordre de la semaine : jour 0 = premier jour du programme (lundi par défaut). */
-const WEEK_ORDER = [['HA', 0], ['Q', 1], ['BA', 2], ['HB', 4], ['BB', 5], ['E', 6]];
+/* Semaine type : jour 0 = premier jour du programme (lundi). Course mardi et jeudi, musculation mercredi, vendredi,
+   samedi et dimanche, footing optionnel le samedi. Chaque séance peut être déplacée dans l'application. */
+const WEEK_ORDER = [['Q', 1], ['HA', 2], ['E', 3], ['BA', 4], ['HB', 5], ['O', 5], ['BB', 6]];
+const RUN_O_KM = 6;
 
 const PHASES = {
   1: { name: 'Relance', weeks: 'Semaines 1 à 4',
@@ -88,7 +91,7 @@ const PHASES = {
        run: 'Fractionné court pour réveiller la vitesse, footing facile.' },
   2: { name: 'Volume', weeks: 'Semaines 5 à 8',
        goal: 'Augmenter le nombre de séries par muscle : c’est la phase qui construit le plus de muscle.',
-       effort: 'Garde 1 répétition en réserve ; la dernière série peut aller au bout.',
+       effort: 'Garde 1 répétition en réserve ; la dernière série peut aller au bout. Repos plus courts pour tenir dans la séance.',
        run: 'Travail au seuil pour tenir une allure soutenue plus longtemps.' },
   3: { name: 'Intensité', weeks: 'Semaines 9 à 12',
        goal: 'Transformer le volume en charges plus lourdes sur les gros exercices, puis tester en semaine 12.',
@@ -99,9 +102,11 @@ const PHASES = {
 /* Prescription par phase et par rôle : séries, fourchette de répétitions, repos (secondes). */
 const RULES = {
   1: { main: { sets: 3, lo: 8, hi: 10, rest: 150 }, comp: { sets: 3, lo: 10, hi: 12, rest: 120 }, acc: { sets: 3, lo: 12, hi: 15, rest: 75 } },
-  2: { main: { sets: 4, lo: 8, hi: 10, rest: 150 }, comp: { sets: 4, lo: 10, hi: 12, rest: 120 }, acc: { sets: 3, lo: 12, hi: 15, rest: 75 } },
-  3: { main: { sets: 4, lo: 5, hi: 7, rest: 180 }, comp: { sets: 3, lo: 8, hi: 10, rest: 120 }, acc: { sets: 3, lo: 10, hi: 12, rest: 75 } },
+  2: { main: { sets: 4, lo: 8, hi: 10, rest: 120 }, comp: { sets: 4, lo: 10, hi: 12, rest: 90 }, acc: { sets: 3, lo: 12, hi: 15, rest: 60 } },
+  3: { main: { sets: 4, lo: 5, hi: 7, rest: 165 }, comp: { sets: 3, lo: 8, hi: 10, rest: 105 }, acc: { sets: 3, lo: 10, hi: 12, rest: 60 } },
 };
+/* Durée estimée : 5 min d'échauffement, 45 s par série, 1 min 30 de transition par exercice. */
+const WARMUP_SEC = 300, SET_SEC = 45, MOVE_SEC = 90;
 const ROLE_LABEL = { main: 'Principal', comp: 'Complémentaire', acc: 'Accessoire' };
 
 /* Séance de qualité en course, par semaine. pace : vma | p800 | seuil | cible. dist en mètres, rec en secondes. */
@@ -111,7 +116,7 @@ const RUN_Q = {
   3:  { title: 'Fractionné moyen', reps: 6,  dist: 800,  pace: 'p800',  rec: 120 },
   4:  { title: 'Rappel de vitesse', reps: 6, dist: 400,  pace: 'vma',   rec: 90 },
   5:  { title: 'Seuil',            reps: 3,  dist: 2000, pace: 'seuil', rec: 120 },
-  6:  { title: 'Seuil',            reps: 4,  dist: 2000, pace: 'seuil', rec: 120 },
+  6:  { title: 'Seuil',            reps: 4,  dist: 2000, pace: 'seuil', rec: 90 },
   7:  { title: 'Seuil long',       reps: 2,  dist: 3000, pace: 'seuil', rec: 180 },
   8:  { title: 'Seuil léger',      reps: 3,  dist: 1000, pace: 'seuil', rec: 90 },
   9:  { title: 'Allure 10 km',     reps: 5,  dist: 1000, pace: 'cible', rec: 120 },
