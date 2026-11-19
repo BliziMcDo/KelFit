@@ -1,5 +1,5 @@
 /* Service worker : met l'application en cache pour un usage hors connexion. */
-const CACHE = 'kelfit-v3';
+const CACHE = 'kelfit-v4';
 const ASSETS = [
  "./",
  "index.html",

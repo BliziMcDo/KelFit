@@ -268,7 +268,7 @@
         </div>
         <div class="sets">${rows}</div></section>`;
     }).join('');
-    view.innerHTML = `<a class="back" href="#/">${BACK}Retour</a>
+    view.innerHTML = `<a class="back" href="#/" data-back>${BACK}Retour</a>
       <div class="page-head"><div><h1>${s.name} · ${s.sub}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · environ ${minutes(w, k)} min</p></div>
         <span class="row">${weekTag(w)}${log?.done ? '<span class="badge ok">Fait</span>' : ''}${moveControl(w, k)}</span></div>
       <main data-session="${key}">${warm}${cards}
@@ -315,7 +315,7 @@
       blocks = block(1, 'work', `Footing de ${info.km} km`, 'Aisance respiratoire : tu dois pouvoir parler en phrases complètes. Termine par 4 lignes droites de 20 secondes.', easy);
       watch = `<li>Un seul bloc Travail : objectif Distance, ${info.km} km, alerte d’allure entre ${mmss(p.easyLo)} et ${mmss(p.easyHi)}/km.</li>`;
     }
-    view.innerHTML = `<a class="back" href="#/">${BACK}Retour</a>
+    view.innerHTML = `<a class="back" href="#/" data-back>${BACK}Retour</a>
       <div class="page-head"><div><h1>Course · ${info.name}</h1><p>Semaine ${w} · Phase ${phaseOf(w)} ${PHASES[phaseOf(w)].name} · environ ${minutes(w, k)} min</p></div>
         <span class="row">${weekTag(w)}${log.done ? '<span class="badge ok">Fait</span>' : ''}${moveControl(w, k)}</span></div>
       <main data-run="${key}">
@@ -490,7 +490,7 @@
     if (t.closest('[data-finish]')) {
       const log = collectSession(main);
       if (!Object.values(log.ex).some(x => doneSets(x).length)) return Sable.toast('Saisis au moins une série avant de terminer');
-      log.done = true; log.date = log.date || iso(today()); save(); stopRest(); Sable.toast('Séance enregistrée'); location.hash = '#/'; return;
+      log.done = true; log.date = log.date || iso(today()); save(); stopRest(); Sable.toast('Séance enregistrée'); goBack(); return;
     }
     if (t.closest('[data-undone]')) { S.logs[main.dataset.session].done = false; save(); return route(); }
     if (t.closest('[data-run-save]')) {
@@ -500,9 +500,10 @@
       S.runs[key] = { done: true, date: prev.date || iso(today()), dist, time, feel: document.getElementById('r-feel').value };
       if (key === '12-E' && Math.abs(dist - 10) <= 0.15) { S.ref10k = Math.round(time / dist * 10); Sable.toast('Test enregistré : ' + mmss(S.ref10k) + ' sur 10 km'); }
       else Sable.toast('Course enregistrée');
-      save(); location.hash = '#/'; return;
+      save(); goBack(); return;
     }
     if (t.closest('[data-run-undone]')) { delete S.runs[main.dataset.run]; save(); return route(); }
+    if (t.closest('[data-back]')) { e.preventDefault(); return goBack(); }
     const mr = t.closest('[data-move-reset]');
     if (mr) { delete S.moved[mr.dataset.moveReset]; save(); Sable.toast('Date d’origine rétablie'); return route(); }
     if (t.closest('#s-shift')) { S.start = iso(addDays(parse(S.start), 7)); save(); Sable.toast('Programme décalé d’une semaine'); return route(); }
@@ -561,8 +562,19 @@
     else if (name === 'reglages') viewSettings();
     else viewToday();
   }
-  let lastHash = null;
-  window.addEventListener('hashchange', () => { if (location.hash !== lastHash) { lastHash = location.hash; route(); window.scrollTo(0, 0); } });
+  /* Navigation : « Retour » revient à la page d'où l'on vient (et à sa position de défilement). */
+  let lastHash = location.hash || '#/', depth = 0, backNav = false;
+  const scrollPos = {};
+  function goBack() { if (depth > 0) { backNav = true; history.back(); } else location.hash = '#/'; }
+  window.addEventListener('hashchange', () => {
+    const h = location.hash || '#/';
+    if (h === lastHash) return;
+    scrollPos[lastHash] = window.scrollY;
+    depth = backNav ? Math.max(0, depth - 1) : depth + 1;
+    lastHash = h; route();
+    window.scrollTo(0, backNav ? scrollPos[h] || 0 : 0);
+    backNav = false;
+  });
   document.addEventListener('sable:theme', () => { if ((location.hash || '').startsWith('#/progres')) viewProgress(); });
   route();
 })();
